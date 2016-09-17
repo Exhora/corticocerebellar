@@ -2,7 +2,7 @@ require(CCA)
 
 load("../dados/phenotypeComplete.RData")                                        
 load("../dados/roisInteresse.RData")                                            
-load("../dados/allRoisCerebelo.RData")
+load("../dados/allRoisCerebelocc400.RData")
 load("../dados/volremovidos.RData")
 load("../dados/funcIdade.RData")
      
@@ -76,6 +76,7 @@ for(ind in grupoTeste){
 				dp <- sd(seriesCerebro[,i])                                     
 				serieRoi[,1] <- seriesCerebro[,i]/dp  
 				corRois[p,i] <-cc(serieRoi, seriesCerebelo)$cor
+				#corRois[p,i] <-gGranger(serieRoi, seriesCerebelo, 1)$B
 			}else{
 				corRois[p,i] <- NA
 				contRoiFora<-contRoiFora+1
@@ -87,8 +88,8 @@ for(ind in grupoTeste){
 
 pval <- matrix(0, length(roisCerebro))
 for(i in 1:length(roisCerebro)){
-	#pval[i] <- summary(lm(corRois[,i] ~ phenotype$DX_GROUP))$coeff[8]
-	pval[i] <- summary(lm(corRois[,i] ~ phenotype$DX_GROUP[grupoTeste] + funcIdade[grupoTeste] + phenotype$SEX[grupoTeste] + factor(phenotype$SITE_ID[grupoTeste])))$coeff[68]
+	pval[i] <- summary(lm(corRois[,i] ~ phenotype$DX_GROUP[grupoTeste]))$coeff[8]
+	#pval[i] <- summary(lm(corRois[,i] ~ phenotype$DX_GROUP[grupoTeste] + funcIdade[grupoTeste] + phenotype$SEX[grupoTeste] + factor(phenotype$SITE_ID[grupoTeste])))$coeff[68]
 }
 
 adjustp <- p.adjust(pval, method = "fdr", length(pval))
