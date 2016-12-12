@@ -1,12 +1,5 @@
-#LEMBRAR: O grupo DT tem que ficar como referencia (atualmente está TEA)
-#TODO: fazer sem scrubbing
 #Verificar se a leitura do cerebelo esta completa
 
-
-
-#source("gGranger.R")
-
-require(CCA)
 require(MASS)
 
 load("../dados/phenotypeComplete.RData")                                        
@@ -18,12 +11,15 @@ load("../dados/funcIdade.RData")
 offset <-2
 id <- phenotype$SUB_ID
 
+#removendo o ventriculo
 roisInteresse <- !roisInteresse
 allRoisCerebelo <- roisCerebelo
 roisCerebelo <- which(allRoisCerebelo == roisInteresse & roisInteresse == TRUE)
 roisCerebro <- which(allRoisCerebelo != roisInteresse & roisInteresse == TRUE)
 
+#pega so ate 31 anos e menos de 5% de vol removidos
 grupoTeste <- which(funcIdade < 31 & vol.removidos < 5)
+
 
 corRois <- matrix(0, length(grupoTeste), length(roisCerebro))   
 corRois2 <- matrix(0, length(grupoTeste), length(roisCerebro))   
@@ -34,13 +30,14 @@ pcs <- matrix(0, length(grupoTeste))
 coefcerebelo <- array(0, dim=c(length(grupoTeste), length(roisCerebro), length(roisCerebelo)))
 
 for(ind in grupoTeste){
-	#carrega o arquivo da pessoa id[ind]
-	file<-paste0(paste0("../original_sempower/sfnwmrda00",id[ind], sep=""),"_session_1_rest_1_aal_TCs.1D", sep="")
+	#carrega o arquivo da pessoa
+	file<-paste0(paste0("../original_sempower/sfnwmrda00",phenotype$SUB_ID[ind], sep=""),"_session_1_rest_1_aal_TCs.1D", sep="")
 	print(ind)
+
+	#pega as series de todas as rois
 	dadosOrig <- read.table(file, header=T)
 	nSeries <- nrow(dadosOrig)
 	nRois <- ncol(dadosOrig)-offset
-	#pega as series de todas as rois
 	dados = matrix(unlist(dadosOrig[ , (offset + 1):(nRois + offset)]), nSeries, nRois, byrow = FALSE)
 	seriesCerebelo <- matrix(0, nSeries, length(roisCerebelo))      
 	seriesCerebro <- matrix(0, nSeries, length(roisCerebro))
@@ -50,13 +47,14 @@ for(ind in grupoTeste){
 		seriesCerebelo[i,] <- dados[i, roisCerebelo]
 		seriesCerebro[i,] <- dados[i, roisCerebro]
 	}  
-	#normaliza as ROIs para variancia 1
+	#normaliza as ROIs para media 0 variancia 1
 	for(i in 1:ncol(seriesCerebelo)){
 		dp <- sd(seriesCerebelo[,i])
 		seriesCerebelo[,i] <- seriesCerebelo[,i]/dp
 	}
+	#remove as pessoas que tem ROIs zeradas no cerebelo
 	if(length(which(is.na(seriesCerebelo)==TRUE))>0) next
-
+	#guarda quantas e quais pessoas efetivamente entraram na analise
 	p<-p+1
 	pessoas[p] <- ind
 
@@ -64,15 +62,19 @@ for(ind in grupoTeste){
 	#PCA
 	res <- prcomp(seriesCerebelo)
 
+	#pega quantos PCs somam 95% para a pessoa p
 	pcs[p] <- max(which(cumsum(res$sdev^2/sum(res$sdev^2)) < 0.95)) +1
 
 	serieRoi <- matrix(0, nrow(seriesCerebro), 1)   
-	#Faz a regressao das ROIs do cortex com os PCs
+	#Faz a regressao das ROIs do cortex com os PCs do cerebelo
 	for( i in 1:length(roisCerebro)){
+		#verifica se a ROI nao esta zerada
 		if(sum(abs(seriesCerebro[,i]))>1){
+			#normaliza para media 0, var 1
 			dp <- sd(seriesCerebro[,i])                                     
 			serieRoi[,1] <- seriesCerebro[,i]/dp
 			
+			#Faz a regressao com o numero de PCs que somam 95%
 			if(pcs[p] == 4)
 				sm <- summary(lm(serieRoi ~ res$x[,1] + res$x[,2] + res$x[,3] + res$x[,4]))
 			else if(pcs[p] == 5)
@@ -109,30 +111,30 @@ for(ind in grupoTeste){
 				sm <- summary(lm(serieRoi ~ res$x[,1] + res$x[,2] + res$x[,3] + res$x[,4] + res$x[,5] + res$x[,6]+ res$x[,7]+ res$x[,8]+ res$x[,9] + res$x[,10] + res$x[,11]+ res$x[,12]+ res$x[,13]+ res$x[,14] + res$x[,15] + res$x[,16] + res$x[,17] + res$x[,18] + res$x[,19] + res$x[,20]))
 
 			#salva as correlacoes
-			corRois[p,i] <- sqrt(sm$adj.r.squared)
+			corRois[p,i] <- sm$adj.r.squared
 
-			#salva os coeficientes do cerebelo
+			#salva os coeficientes do cerebelo: matriz de rotacao * coeficientes dos PCs
 			coefcerebelo[p,i, ] <- res$rotation[, 1:pcs[p]] %*% as.matrix(sm$coeff[2:(pcs[p]+1)],pcs[p],1)
 
-	#		corRois[p,i] <-cc(serieRoi, res$x[,1:pcs[p]])$cor
-			#corRois[p,i] <- gGranger(serieRoi, seriesCerebelo, 1)$B
 		}else{
+			#se a ROI estiver zerada, ele salva como NA para ser ignorado na regressao
 			corRois[p,i] <- NA
 		}
 	
 	}
 }
 
+#grupo eh efetivamente entrou na regressao
 grupo <- pessoas[1:p]
 
 #coloca o grupo DT como referencia
-fenotipo <- phenotype$DX_GROUP[grupo]
-fenotipo[which(fenotipo ==2)] = 0
+diagnotico <- phenotype$DX_GROUP[grupo]
+diagnotico[which(diagnotico ==2)] = 0
 
 pval_ss <- matrix(0, length(roisCerebro))
 for(i in 1:length(roisCerebro)){
-	pval_ss[i] <- summary(lm(corRois[1:p,i] ~ fenotipo + funcIdade[grupo] + phenotype$SEX[grupo] + factor(phenotype$SITE_ID[grupo])))$coeff[68]
-	#pval[i] <- summary(lm(corRois[1:p,i] ~ factor(phenotype$DX_GROUP[grupo]) + funcIdade[grupo] + phenotype$SEX[grupo] + factor(phenotype$SITE_ID[grupo]) + vol.removidos[grupo]))$coeff[71]
+	pval_ss[i] <- summary(lm(corRois[1:p,i] ~ diagnotico + funcIdade[grupo] + phenotype$SEX[grupo] + factor(phenotype$SITE_ID[grupo])))$coeff[68]
+	#pval_ss[i] <- summary(lm(corRois[1:p,i] ~ factor(phenotype$DX_GROUP[grupo]) + funcIdade[grupo] + phenotype$SEX[grupo] + factor(phenotype$SITE_ID[grupo]) + vol.removidos[grupo]))$coeff[71]
 }
 
-#signif <- which(p.adjust(pval, method = "bonferroni", length(pval))<0.05)
+signifss <- which(p.adjust(pval_ss, method = "bonferroni", length(pval_ss))<0.05)
